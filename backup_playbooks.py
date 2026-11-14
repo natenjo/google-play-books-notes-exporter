@@ -130,7 +130,21 @@ def main():
     parser.add_argument('--max-screens', type=int, default=500)
     parser.add_argument('--delay', type=float, default=2.5, help='Seconds to settle after each swipe')
     parser.add_argument('--stable', type=int, default=3, help='Unchanged captures before stopping')
+    parser.add_argument('--epub', type=Path, help='Create an annotated copy of this EPUB (offline mode)')
+    parser.add_argument('--annotations', type=Path, help='Extractor JSON array to embed; requires --epub')
+    parser.add_argument('--epub-output', type=Path, help='New EPUB path; default: INPUT-annotated.epub')
     args = parser.parse_args()
+    # EPUB conversion is a separate offline mode. Return before creating a
+    # capture folder or making any ADB connection; the live loop stays unchanged.
+    if args.epub or args.annotations or args.epub_output:
+        if not args.epub or not args.annotations or args.import_xml:
+            parser.error('Use --epub and --annotations together, without --import-xml')
+        from epub_annotations import embed_annotations
+        try:
+            embed_annotations(args.epub, args.annotations, args.epub_output)
+        except (ValueError, OSError, ET.ParseError) as exc:
+            parser.exit(1, f'EPUB conversion failed: {exc}\n')
+        return
     if args.max_screens < 1 or args.delay < 0 or args.stable < 2:
         parser.error('Use max-screens >= 1, delay >= 0, stable >= 2')
     # A timestamp plus random suffix prevents separate runs overwriting backups.

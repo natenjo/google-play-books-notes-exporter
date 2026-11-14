@@ -50,3 +50,68 @@ python .\backup_playbooks.py --import-xml E:\downloads\boox --output E:\download
 ```
 
 No automatic wake, settings changes, scrolling to the top, or navigation into individual notes is performed. If the list disappears or the book title changes, the script stops.
+
+## Embed annotations in a separate EPUB
+
+Provide the original EPUB and an `annotations.json` export (or a merged JSON
+array with the same structure). This mode works offline and does not use ADB.
+Keep `epub_annotations.py` beside `backup_playbooks.py`.
+
+```powershell
+python .\backup_playbooks.py --epub "C:\Books\My book.epub" --annotations "C:\Backups\final.json"
+```
+
+This creates `My book-annotated.epub` beside the original, plus
+`My book-annotated.annotations-report.json`. To choose another output path:
+
+```powershell
+python .\backup_playbooks.py --epub "C:\Books\My book.epub" --annotations "C:\Backups\final.json" --epub-output "C:\Backups\My annotated book.epub"
+```
+
+The original EPUB and input JSON are never modified. Existing output files are
+never overwritten; choose a different name for another conversion. An input
+EPUB that already contains embedded annotation data is rejected.
+
+The new EPUB contains an `AnnotationSet` in `META-INF/annotations.json`, following
+the [EPUB Annotations 1.0 Working Draft of 15 October 2026](https://www.w3.org/TR/2026/WD-epub-anno-10-20261015/).
+The specification is still a draft, and whether highlights appear depends on
+the reader's support. This does not import annotations back into Google Play
+Books or paint highlights into the book's HTML. The original EPUB version and
+all existing resource contents are preserved.
+
+### How matching works
+
+`epub_annotations.py` reads XHTML documents in the EPUB spine, then searches for
+each selected passage. It normalizes whitespace and ignores discretionary soft
+hyphens and invisible separators, while retaining a map to original character
+offsets. Unique matches become `TextPositionSelector` ranges in the original
+body text. Chapter headings help narrow repeated passages. Android page numbers
+are preserved in the report, but are not treated as reliable EPUB locations.
+Spelling, punctuation and letter case are not fuzzy-matched.
+
+Comments from `fields.note` become annotation bodies; a highlighted passage is
+not itself treated as a comment. Original colors and annotation dates are absent
+from the extraction format. Readers use their default highlight styling, and
+the required `created` value records conversion time, not original reading time.
+Stable annotation UUIDs are derived from publication identity, text range and
+comment, so repeated captures of the same range/comment are grouped.
+
+The report records each input row as `embedded`, `duplicate`, `empty_text`,
+`not_found` or `ambiguous`. Ambiguous matches include candidate locations and
+surrounding text; they are not silently attached to an arbitrary occurrence.
+Empty or unresolved rows are retained in `META-INF/playbooks-source.json`
+alongside every original input row, so nothing is discarded. The source archive
+also retains extraction metadata. The new EPUB therefore includes personal
+annotations; share it only when you intend to share those annotations too.
+
+Manually merged JSON must be valid JSON: join array entries with commas and
+retain one enclosing array. Conversion errors identify invalid JSON lines.
+
+### Verification
+
+Run the offline conversion tests (no device, private book or third-party
+packages needed):
+
+```powershell
+python -m unittest discover -s tests -v
+```
