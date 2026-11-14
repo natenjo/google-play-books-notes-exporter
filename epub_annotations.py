@@ -2,12 +2,14 @@
 
 Implements the 15 October 2026 EPUB Annotations 1.0 Working Draft:
 https://www.w3.org/TR/2026/WD-epub-anno-10-20261015/
+Also embeds Calibre-native highlights in META-INF/calibre_bookmarks.txt.
 
 No ADB or third-party Python packages are needed. This module is called by
 backup_playbooks.py when --epub and --annotations are supplied together.
 """
 from datetime import datetime, timezone
 import hashlib
+import base64
 import json
 from pathlib import Path
 import posixpath
@@ -21,6 +23,95 @@ DC = '{http://purl.org/dc/elements/1.1/}'
 CONTAINER = '{urn:oasis:names:tc:opendocument:xmlns:container}'
 ANNOTATIONS_PATH = 'META-INF/annotations.json'
 ARCHIVE_PATH = 'META-INF/playbooks-source.json'
+CALIBRE_PATH = 'META-INF/calibre_bookmarks.txt'
+CALIBRE_MAGIC = b'encoding=json+base64:\n'
+
+
+def utf16_length(text):
+    """Browser/Calibre offsets count UTF-16 units: an emoji occupies two."""
+    return len(text.encode('utf-16-le')) // 2
+
+
+def calibre_text_runs(body):
+    """Map body textContent offsets to Calibre's document-local CFI positions.
+
+    Calibre uses /2 for the HTML element and /4 for its body. Descendant element
+    steps are twice their one-based ELEMENT sibling number. Its CFI encoder
+    groups a parent's direct text nodes into one virtual /1 text stream, skipping
+    intervening elements' text. Thus a tail after <em> belongs to the surrounding
+    paragraph's stream, not to the <em> element. Keep that stream's UTF-16 offset
+    separate from the whole body's Python character offset used for matching.
+
+    References: calibre src/pyj/read_book/cfi.pyj (encode, adjust_node_for_text_offset,
+    node_for_text_offset) and src/pyj/read_book/annotations.pyj (add_highlight).
+    No nodes or IDs are inserted into the original XHTML.
+    """
+    runs = []
+    position = 0
+
+    def add(text, parent_path, direct_offset, text_index):
+        nonlocal position
+        if text:
+            runs.append({'start': position, 'end': position + len(text),
+                         'path': parent_path + '/1', 'direct_offset': direct_offset, 'text': text,
+                         'node_path': parent_path + '/' + str(text_index * 2 + 1)})
+            position += len(text)
+
+    def walk(element, path):
+        add(element.text, path, 0, 0)
+        direct_offset = utf16_length(element.text or '')
+        text_index = int(bool(element.text))
+        for number, child in enumerate(element, 1):
+            walk(child, path + '/' + str(number * 2))
+            add(child.tail, path, direct_offset, text_index)
+            direct_offset += utf16_length(child.tail or '')
+            text_index += int(bool(child.tail))
+
+    walk(body, '/2/4')
+    return runs
+
+
+def calibre_cfi(document, position, end=False):
+    """Encode one endpoint; an exclusive end may sit just after its text node."""
+    for run in document['calibre_runs']:
+        contains = run['start'] < position <= run['end'] if end else run['start'] <= position < run['end']
+        if contains:
+            # A grouped offset exactly at the end of an earlier sibling text
+            # node resolves there, BEFORE any intervening inline element. For
+            # a start at the beginning of a later tail, use Calibre's explicit
+            # odd text-node step instead, so that preceding <em>/<span> text
+            # does not accidentally become part of the highlight.
+            if not end and position == run['start'] and run['direct_offset']:
+                return run['node_path'] + ':0'
+            offset = run['direct_offset'] + utf16_length(run['text'][:position - run['start']])
+            return run['path'] + ':' + str(offset)
+    raise ValueError(f'Cannot create Calibre CFI for {document["path"]} at {position}')
+
+
+def read_calibre_annotations(archive):
+    """Retain existing Calibre notes/bookmarks when adding our highlights.
+
+    Refuse legacy or unrecognised data rather than replacing it silently.
+    The modern on-disk format is a magic header followed by base64-encoded JSON.
+    """
+    if CALIBRE_PATH not in archive.namelist():
+        return []
+    raw = archive.read(CALIBRE_PATH)
+    if not raw.startswith(CALIBRE_MAGIC):
+        raise ValueError('EPUB contains legacy/unrecognised Calibre bookmarks; use a clean original')
+    try:
+        data = json.loads(base64.b64decode(b''.join(raw[len(CALIBRE_MAGIC):].split()), validate=True))
+    except (ValueError, UnicodeError) as exc:
+        raise ValueError('Existing Calibre annotation data is invalid') from exc
+    if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
+        raise ValueError('Existing Calibre annotation data must be an array of objects')
+    return data
+
+
+def serialize_calibre(annotations):
+    """Match Calibre's save_annots_to_epub format, including 80-byte line wraps."""
+    encoded = base64.b64encode(json.dumps(annotations, ensure_ascii=False).encode('utf-8'))
+    return CALIBRE_MAGIC + b'\n'.join(encoded[i:i + 80] for i in range(0, len(encoded), 80))
 
 
 def normalize(text):
@@ -84,7 +175,7 @@ def read_book(archive):
         raise ValueError('EPUB package is missing metadata, manifest or spine')
     items = {item.get('id'): item for item in manifest}
     documents = []
-    for itemref in spine:
+    for spine_index, itemref in enumerate(spine):
         item = items.get(itemref.get('idref'))
         if item is None:
             raise ValueError('Spine references a missing manifest item')
@@ -100,7 +191,8 @@ def read_book(archive):
         headings = [normalize(''.join(e.itertext()))[0] for e in body.iter()
                     if local_name(e) in ('h1', 'h2', 'h3', 'h4', 'h5', 'h6')]
         documents.append({'path': path, 'text': original, 'search': searchable,
-                          'offsets': offsets, 'headings': headings})
+                          'offsets': offsets, 'headings': headings,
+                          'spine_index': spine_index, 'calibre_runs': calibre_text_runs(body)})
     about = {}
     for name in ('title', 'publisher', 'creator', 'date'):
         values = [''.join(e.itertext()) for e in metadata.findall(DC + name)]
@@ -190,6 +282,9 @@ def embed_annotations(epub, annotations, destination=None):
         if archive.read('mimetype') != b'application/epub+zip':
             raise ValueError('Invalid EPUB mimetype')
         about, identity, documents = read_book(archive)
+        calibre_items = read_calibre_annotations(archive)
+        calibre_existing_count = len(calibre_items)
+        document_by_path = {document['path']: document for document in documents}
         if books and normalize(about.get('dc:title', ''))[0] not in books:
             raise ValueError('Book title in JSON does not match EPUB metadata')
         items, results, seen = [], [], {}
@@ -231,6 +326,26 @@ def embed_annotations(epub, annotations, destination=None):
                                   'created': generated, 'motivation': 'highlighting', 'target': target}
                     if comment:
                         annotation['body'] = {'type': 'TextualBody', 'format': 'text/plain', 'value': comment}
+                    # A parallel Calibre entry points to exactly the same range.
+                    # Use the book's actual text (including its whitespace) as
+                    # highlighted_text, and only put the user's comment in notes.
+                    document = document_by_path[match['path']]
+                    calibre_annotation = {
+                        'type': 'highlight', 'uuid': annotation_id, 'timestamp': generated,
+                        'highlighted_text': document['text'][match['start']:match['end']],
+                        'start_cfi': calibre_cfi(document, match['start']),
+                        'end_cfi': calibre_cfi(document, match['end'], end=True),
+                        'spine_name': document['path'], 'spine_index': document['spine_index'],
+                        'style': {'type': 'builtin', 'kind': 'color', 'which': 'yellow'},
+                    }
+                    if comment:
+                        calibre_annotation['notes'] = comment
+                    if row.get('chapter'):
+                        calibre_annotation['toc_family_titles'] = [row['chapter']]
+                    # UUIDs are stable across runs. Keep pre-existing bookmarks
+                    # and unrelated highlights, replacing only this exact UUID.
+                    calibre_items = [a for a in calibre_items if a.get('uuid') != annotation_id]
+                    calibre_items.append(calibre_annotation)
                     items.append(annotation)
                     seen[key] = annotation['id']
                     result.update(status='embedded', annotation=annotation['id'])
@@ -243,6 +358,8 @@ def embed_annotations(epub, annotations, destination=None):
                    for status in ('embedded', 'duplicate', 'empty_text', 'not_found', 'ambiguous')}
         report = {'specification': 'https://www.w3.org/TR/2026/WD-epub-anno-10-20261015/',
                   'source_epub_sha256': source_digest, 'summary': summary,
+                  'calibre': {'embedded_highlights': len(items), 'existing_entries': calibre_existing_count,
+                              'path': CALIBRE_PATH},
                   'created_timestamp': 'Conversion time; original annotation dates are absent from extractor JSON.',
                   'notes': 'Only unique exact matches after whitespace/invisible-character normalization are anchored. '
                            'Unresolved rows remain in META-INF/playbooks-source.json. Original colors are unavailable; '
@@ -260,11 +377,13 @@ def embed_annotations(epub, annotations, destination=None):
                         mime_info = archive.getinfo('mimetype')
                         target_zip.writestr(mime_info, archive.read('mimetype'), compress_type=zipfile.ZIP_STORED)
                         for info in archive.infolist():
-                            if info.filename != 'mimetype':
+                            if info.filename not in ('mimetype', CALIBRE_PATH):
                                 target_zip.writestr(info, archive.read(info.filename))
                         for path, data in ((ANNOTATIONS_PATH, annotation_set), (ARCHIVE_PATH, rows)):
                             target_zip.writestr(path, json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8'),
                                                compress_type=zipfile.ZIP_DEFLATED)
+                        target_zip.writestr(CALIBRE_PATH, serialize_calibre(calibre_items),
+                                           compress_type=zipfile.ZIP_DEFLATED)
                     json.dump(report, report_file, ensure_ascii=False, indent=2)
             except Exception:
                 # A partially written new EPUB is not a valid deliverable.

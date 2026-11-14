@@ -5,8 +5,11 @@ from pathlib import Path
 import tempfile
 import unittest
 import zipfile
+import xml.etree.ElementTree as ET
 
-from epub_annotations import embed_annotations, normalize, read_book
+from epub_annotations import (CALIBRE_PATH, calibre_cfi, calibre_text_runs,
+                              embed_annotations, normalize, read_book,
+                              read_calibre_annotations, serialize_calibre)
 
 
 class EpubAnnotationsTests(unittest.TestCase):
@@ -56,6 +59,14 @@ class EpubAnnotationsTests(unittest.TestCase):
             actual = documents[0]['text'][selector['start']:selector['end']]
             self.assertEqual(normalize(actual)[0], row['text'])
             self.assertEqual(json.loads(output.read('META-INF/playbooks-source.json')), [row, row])
+            calibre = read_calibre_annotations(output)
+            self.assertEqual(len(calibre), 1)
+            self.assertEqual(calibre[0]['notes'], 'My actual comment')
+            self.assertEqual(calibre[0]['uuid'], item['id'].removeprefix('urn:uuid:'))
+            self.assertEqual(calibre[0]['spine_name'], 'EPUB/one.xhtml')
+            self.assertEqual(calibre[0]['spine_index'], 0)
+            self.assertEqual(calibre[0]['start_cfi'], '/2/4/4/1:7')
+            self.assertEqual(normalize(calibre[0]['highlighted_text'])[0], row['text'])
 
     def test_uncertain_and_empty_rows_are_preserved_without_false_highlights(self):
         rows = [{'text': 'Repeat'}, {'text': 'not in this book'}, {'text': ''}]
@@ -106,6 +117,39 @@ class EpubAnnotationsTests(unittest.TestCase):
             first_id = json.loads(a.read('META-INF/annotations.json'))['items'][0]['id']
             second_id = json.loads(b.read('META-INF/annotations.json'))['items'][0]['id']
             self.assertEqual(first_id, second_id)
+
+    def test_cfis_handle_utf16_and_inline_text_boundaries(self):
+        body = ET.fromstring('<body><p>A😀<em>B</em>C<span>.</span>Tail</p></body>')
+        document = {'path': 'test.xhtml', 'calibre_runs': calibre_text_runs(body)}
+        # Python positions count the emoji once; browser CFI offsets count it twice.
+        self.assertEqual(calibre_cfi(document, 1), '/2/4/2/1:1')
+        self.assertEqual(calibre_cfi(document, 2, end=True), '/2/4/2/1:3')
+        # Start after inline markup must exclude B and the preceding period.
+        self.assertEqual(calibre_cfi(document, 3), '/2/4/2/3:0')
+        self.assertEqual(calibre_cfi(document, 5), '/2/4/2/5:0')
+        self.assertEqual(calibre_cfi(document, 9, end=True), '/2/4/2/1:8')
+        # A point inside the emphasis element uses its own element path.
+        self.assertEqual(calibre_cfi(document, 2), '/2/4/2/2/1:0')
+
+    def test_existing_calibre_bookmarks_and_notes_survive(self):
+        existing = [{'type': 'bookmark', 'title': 'Keep me', 'pos': 'epubcfi(/2/2/4)',
+                     'pos_type': 'epubcfi', 'timestamp': '2020-01-01T00:00:00Z'}]
+        with zipfile.ZipFile(self.book, 'a') as archive:
+            archive.writestr(CALIBRE_PATH, serialize_calibre(existing))
+        self.convert([{'text': 'quick'}])
+        with zipfile.ZipFile(self.book) as original, zipfile.ZipFile(self.output) as output:
+            self.assertEqual(read_calibre_annotations(original), existing)
+            annotations = read_calibre_annotations(output)
+            self.assertEqual(annotations[0], existing[0])
+            self.assertEqual(len(annotations), 2)
+            self.assertEqual(output.namelist().count(CALIBRE_PATH), 1)
+
+    def test_legacy_calibre_data_is_not_silently_replaced(self):
+        with zipfile.ZipFile(self.book, 'a') as archive:
+            archive.writestr(CALIBRE_PATH, b'legacy bookmark data')
+        with self.assertRaisesRegex(ValueError, 'legacy'):
+            self.convert([{'text': 'quick'}])
+        self.assertFalse(self.output.exists())
 
 
 if __name__ == '__main__':

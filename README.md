@@ -70,14 +70,29 @@ python .\backup_playbooks.py --epub "C:\Books\My book.epub" --annotations "C:\Ba
 
 The original EPUB and input JSON are never modified. Existing output files are
 never overwritten; choose a different name for another conversion. An input
-EPUB that already contains embedded annotation data is rejected.
+EPUB that already contains our W3C annotation set or source archive is rejected.
 
-The new EPUB contains an `AnnotationSet` in `META-INF/annotations.json`, following
+The new EPUB contains annotations in **both formats**:
+
+- **EPUB Annotations 1.0:** an `AnnotationSet` in `META-INF/annotations.json`, following
 the [EPUB Annotations 1.0 Working Draft of 15 October 2026](https://www.w3.org/TR/2026/WD-epub-anno-10-20261015/).
-The specification is still a draft, and whether highlights appear depends on
-the reader's support. This does not import annotations back into Google Play
-Books or paint highlights into the book's HTML. The original EPUB version and
-all existing resource contents are preserved.
+  This specification is still a draft, and display depends on reader support.
+- **Calibre:** highlights and notes in `META-INF/calibre_bookmarks.txt`, using
+  Calibre's JSON/base64 encoding, document-local CFI ranges, spine references and
+  yellow highlight style. These can be read by the Calibre E-book viewer.
+
+Both formats are written by default with the same command; Calibre does not need
+to be installed to run the exporter. Open the **new output EPUB directly** in the
+Calibre E-book viewer. An older library copy of the book does not automatically
+receive these annotations. Highlights are editable reader annotations; the
+chapter XHTML itself is not painted yellow, so extracting a chapter and opening
+it in a browser will still show its original appearance.
+
+Existing modern Calibre bookmarks/highlights are retained alongside the added
+highlights; legacy/unrecognised Calibre annotation data is rejected instead of
+silently replaced. The original EPUB version and all chapter, image, font and
+stylesheet contents are preserved. Only the new copy's Calibre annotation file
+is created or updated. This does not import annotations back into Google Play Books.
 
 ### How matching works
 
@@ -95,6 +110,14 @@ from the extraction format. Readers use their default highlight styling, and
 the required `created` value records conversion time, not original reading time.
 Stable annotation UUIDs are derived from publication identity, text range and
 comment, so repeated captures of the same range/comment are grouped.
+
+Calibre CFI generation maps the same matched ranges to DOM text nodes. It counts
+browser offsets in UTF-16 units (important for emoji), handles selections across
+inline elements and keeps starts at text-node boundaries from including preceding
+inline text. The matching report also records the number of Calibre highlights
+added and existing Calibre entries retained. Format references:
+[Calibre's annotation writer](https://github.com/kovidgoyal/calibre/blob/master/src/calibre/gui2/viewer/annotations.py),
+[Calibre's CFI implementation](https://github.com/kovidgoyal/calibre/blob/master/src/pyj/read_book/cfi.pyj).
 
 The report records each input row as `embedded`, `duplicate`, `empty_text`,
 `not_found` or `ambiguous`. Ambiguous matches include candidate locations and
