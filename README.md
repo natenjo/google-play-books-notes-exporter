@@ -69,10 +69,9 @@ overwritten. If omitted, a timestamped context directory is created beside the
 EPUB.
 
 The output directory contains only **`context.md`**: the complete, ready-to-upload
-Markdown packet, including task instructions, highlights, personal notes and
+Markdown file, including task instructions, highlights, personal notes and
 referenced book passages. Upload this file to your chosen AI and ask it to follow
-the included instructions. No separate instructions, JSON archive, README or
-split Markdown files are generated.
+the included instructions. 
 
 Each highlight has a stable `H-` source ID. Its original selection, personal
 notes, page/chapter labels and EPUB character range remain separate. The matched
@@ -83,8 +82,7 @@ IDs, so the complete packet does not repeat one paragraph for every highlight.
 Exact range/comment repetitions are grouped without losing source rows or
 different comments. Ambiguous matches carry alternative locations and context;
 missing matches and note-only rows are explicitly labelled. Rows without text
-or notes are counted but omitted from the Markdown. The original input JSON is
-not modified.
+or notes are counted but omitted from the Markdown.
 The extractor's normalization handles whitespace/invisible-character differences;
 it does not fuzzy-match altered words or silently invent an intended selection.
 Instead, the task prompt asks the AI to interpret imprecise selection boundaries
@@ -101,9 +99,8 @@ python .\backup_playbooks.py --prepare-only --epub "C:\Books\My book.epub" --ann
 ```
 
 `--context-neighbors` is the number of adjacent nonempty text blocks on **each**
-side (default: 1). The full context is kept in one file, without splitting or
-size-based truncation. If it exceeds your AI's capacity, reduce the neighboring
-context or use an AI with more capacity. All `--context-*` options require `--prepare-only`; `--epub-output`
+side (default: 1). The full context is kept in one file.
+ All `--context-*` options require `--prepare-only`; `--epub-output`
 and `--import-xml` cannot be combined with it.
 
 
