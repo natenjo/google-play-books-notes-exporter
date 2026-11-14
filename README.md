@@ -5,6 +5,8 @@ This tool can be handy, if you run into sync issues of google play books and don
 
 This tool can also be handy to backup your highlights you made in DRM protected books, where the publisher is preventing that this is saved into the Google Drive file ([read more](https://www.reddit.com/r/Calibre/s/vzuvJuTcC4))
 
+...And there is an extra feature: Prepare a prompt for an AI based summany of your annotations
+
 ## Prerequisits
 - Android Device
    - with Google Play Books which has notes and/or highlights you want to export
@@ -53,7 +55,7 @@ python .\backup_playbooks.py --import-xml E:\downloads\boox --output E:\download
 
 No automatic wake, settings changes, scrolling to the top, or navigation into individual notes is performed. If the list disappears or the book title changes, the script stops.
 
-## Prepare a context packet for an AI based summany of your annotations
+## Prepare a prompt for an AI based summany of your annotations
 
 Use `--prepare-only` with the EPUB and your extracted annotation JSON. This
 creates one local `context.md` file for manual use with any AI. It does not call
