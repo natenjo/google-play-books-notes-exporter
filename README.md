@@ -53,20 +53,19 @@ python .\backup_playbooks.py --import-xml E:\downloads\boox --output E:\download
 
 No automatic wake, settings changes, scrolling to the top, or navigation into individual notes is performed. If the list disappears or the book title changes, the script stops.
 
-## Prepare a context packet for an AI (offline)
+## Prepare a context packet for an AI based summany of your annotations
 
 Use `--prepare-only` with the EPUB and your extracted annotation JSON. This
-creates local files for manual use with any AI. It does not call an API, require
-an API key, connect to ADB, modify the book or generate a summary itself.
+creates local files for manual use with any AI. It does not call an AI Model itsself, in this way you can pass it on to any AI you have access to.  
 Keep `prepare_context.py` and `epub_annotations.py` beside `backup_playbooks.py`.
 
 ```powershell
 python .\backup_playbooks.py --prepare-only --epub "C:\Books\My book.epub" --annotations "C:\Backups\final.json" --context-output "C:\Backups\My book context"
 ```
 
-`--context-output` must name a **new directory**; existing directories are never
+`--context-output` must name a **new directory**; existing directories are not
 overwritten. If omitted, a timestamped context directory is created beside the
-EPUB. The original EPUB and JSON are opened read-only.
+EPUB.
 
 The packet includes:
 
@@ -113,15 +112,6 @@ rather than silently truncated. Reduce context or use an AI with more capacity
 if needed. All `--context-*` options require `--prepare-only`; `--epub-output`
 and `--import-xml` cannot be combined with it.
 
-Packets remain local until you manually share them. They contain book excerpts
-and personal notes, so generated packets are excluded from Git by the supplied
-ignore patterns. No AI service or SDK dependency is added.
-
-Run all offline tests with:
-
-```powershell
-python -m unittest discover -s tests -v
-```
 
 ## Embed annotations in a separate EPUB
 
