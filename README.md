@@ -3,6 +3,8 @@
 ## Why
 This tool can be handy, if you run into sync issues of google play books and don't find an option to backup/export your annotations & highlights you made on your Google Play Books Android app (e.g. [see](https://www.reddit.com/r/GooglePlayBooks/comments/1xq08bf/noteshighlights_from_android_boox_go_6_not/) [these](https://support.google.com/googleplay/thread/453109335/notes-highlights-not-syncing-across-devices-in-google-play-books-page-position-sync-works-fine) [issues](https://support.google.com/googleplay/thread/383293083/play-books-highlight-sync-issue?hl=en))
 
+This tool can also be handy to backup your highlights you made in DRM protected books, where the publisher is preventing that this is saved into the Google Drive file ([read more](https://www.reddit.com/r/Calibre/s/vzuvJuTcC4))
+
 ## Prerequisits
 - Android Device
    - with Google Play Books which has notes and/or highlights you want to export
