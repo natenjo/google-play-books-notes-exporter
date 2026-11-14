@@ -53,8 +53,7 @@ No automatic wake, settings changes, scrolling to the top, or navigation into in
 
 ## Embed annotations in a separate EPUB
 
-Provide the original EPUB and an `annotations.json` export (or a merged JSON
-array with the same structure). This mode works offline and does not use ADB.
+Provide the original EPUB and an `annotations.json` export. This mode works offline and does not use ADB.
 Keep `epub_annotations.py` beside `backup_playbooks.py`.
 
 ```powershell
@@ -68,8 +67,8 @@ This creates `My book-annotated.epub` beside the original, plus
 python .\backup_playbooks.py --epub "C:\Books\My book.epub" --annotations "C:\Backups\final.json" --epub-output "C:\Backups\My annotated book.epub"
 ```
 
-The original EPUB and input JSON are never modified. Existing output files are
-never overwritten; choose a different name for another conversion. An input
+The original EPUB and input JSON are not modified. Existing output files are
+not overwritten; choose a different name for another conversion. An input
 EPUB that already contains our W3C annotation set or source archive is rejected.
 
 The new EPUB contains annotations in **both formats**:
@@ -81,18 +80,14 @@ the [EPUB Annotations 1.0 Working Draft of 15 October 2026](https://www.w3.org/T
   Calibre's JSON/base64 encoding, document-local CFI ranges, spine references and
   yellow highlight style. These can be read by the Calibre E-book viewer.
 
-Both formats are written by default with the same command; Calibre does not need
-to be installed to run the exporter. Open the **new output EPUB directly** in the
+Both formats are written by default with the same command. Open the **new output EPUB directly** in the
 Calibre E-book viewer. An older library copy of the book does not automatically
-receive these annotations. Highlights are editable reader annotations; the
-chapter XHTML itself is not painted yellow, so extracting a chapter and opening
-it in a browser will still show its original appearance.
+receive these annotations. Highlights are editable reader annotations.
 
-Existing modern Calibre bookmarks/highlights are retained alongside the added
-highlights; legacy/unrecognised Calibre annotation data is rejected instead of
-silently replaced. The original EPUB version and all chapter, image, font and
+Existing Calibre bookmarks/highlights are retained alongside the added
+highlights. The original EPUB version and all chapter, image, font and
 stylesheet contents are preserved. Only the new copy's Calibre annotation file
-is created or updated. This does not import annotations back into Google Play Books.
+is created or updated. Note: this does not import annotations back into Google Play Books if you reupload the epub.
 
 ### How matching works
 
@@ -100,7 +95,7 @@ is created or updated. This does not import annotations back into Google Play Bo
 each selected passage. It normalizes whitespace and ignores discretionary soft
 hyphens and invisible separators, while retaining a map to original character
 offsets. Unique matches become `TextPositionSelector` ranges in the original
-body text. Chapter headings help narrow repeated passages. Android page numbers
+body text. Chapter headings help narrow repeated passages. Page numbers
 are preserved in the report, but are not treated as reliable EPUB locations.
 Spelling, punctuation and letter case are not fuzzy-matched.
 
@@ -123,18 +118,4 @@ The report records each input row as `embedded`, `duplicate`, `empty_text`,
 `not_found` or `ambiguous`. Ambiguous matches include candidate locations and
 surrounding text; they are not silently attached to an arbitrary occurrence.
 Empty or unresolved rows are retained in `META-INF/playbooks-source.json`
-alongside every original input row, so nothing is discarded. The source archive
-also retains extraction metadata. The new EPUB therefore includes personal
-annotations; share it only when you intend to share those annotations too.
-
-Manually merged JSON must be valid JSON: join array entries with commas and
-retain one enclosing array. Conversion errors identify invalid JSON lines.
-
-### Verification
-
-Run the offline conversion tests (no device, private book or third-party
-packages needed):
-
-```powershell
-python -m unittest discover -s tests -v
-```
+alongside every original input row, so nothing is discarded. 
