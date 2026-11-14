@@ -19,3 +19,9 @@ run.json
 *.epub
 *.annotations-report.json
 private/
+
+# Local context packets contain book excerpts and personal notes
+*-context-*/
+context.json
+context.md
+context-part-*.md

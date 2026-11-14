@@ -53,6 +53,76 @@ python .\backup_playbooks.py --import-xml E:\downloads\boox --output E:\download
 
 No automatic wake, settings changes, scrolling to the top, or navigation into individual notes is performed. If the list disappears or the book title changes, the script stops.
 
+## Prepare a context packet for an AI (offline)
+
+Use `--prepare-only` with the EPUB and your extracted annotation JSON. This
+creates local files for manual use with any AI. It does not call an API, require
+an API key, connect to ADB, modify the book or generate a summary itself.
+Keep `prepare_context.py` and `epub_annotations.py` beside `backup_playbooks.py`.
+
+```powershell
+python .\backup_playbooks.py --prepare-only --epub "C:\Books\My book.epub" --annotations "C:\Backups\final.json" --context-output "C:\Backups\My book context"
+```
+
+`--context-output` must name a **new directory**; existing directories are never
+overwritten. If omitted, a timestamped context directory is created beside the
+EPUB. The original EPUB and JSON are opened read-only.
+
+The packet includes:
+
+- `context.md`: the complete, ready-to-upload Markdown packet, with task instructions.
+- `context-part-001.md`, etc.: self-contained parts for smaller AI context windows.
+  Use these **instead of** the complete packet when it is too large. Read/process
+  all parts before asking for the final thematic summary.
+- `instructions.md`: the standalone task prompt, which you can edit before use.
+- `context.json`: the full structured archive, including all original input rows,
+  grouped selections, notes, candidate locations, settings and input hashes.
+- `README.md`: instructions for using the packet.
+
+Each highlight has a stable `H-` source ID. Its original selection, personal
+notes, page/chapter labels and EPUB character range remain separate. The matched
+paragraph and, by default, one neighboring text block on each side provide
+context. Active EPUB section headings are included. Shared passages have `P-`
+IDs, so the complete packet does not repeat one paragraph for every highlight.
+Every split part includes all passages referenced by its own highlights.
+
+Exact range/comment repetitions are grouped without losing source rows or
+different comments. Ambiguous matches carry alternative locations and context;
+missing matches and note-only rows are explicitly labelled. Rows without text
+or notes stay in `context.json` but are omitted from the AI-facing Markdown.
+The extractor's normalization handles whitespace/invisible-character differences;
+it does not fuzzy-match altered words or silently invent an intended selection.
+Instead, the task prompt asks the AI to interpret imprecise selection boundaries
+using the surrounding text.
+
+The prompt requests a thematic bullet-point summary in the book's language,
+with page/chapter references and source IDs, considering both highlights and
+personal notes. It keeps the author's claims separate from personal notes.
+
+Optional settings:
+
+```powershell
+python .\backup_playbooks.py --prepare-only --epub "C:\Books\My book.epub" --annotations "C:\Backups\final.json" --context-neighbors 0 --context-part-chars 40000
+```
+
+`--context-neighbors` is the number of adjacent nonempty text blocks on **each**
+side (default: 1). `--context-part-chars` sets a rendered **character** target
+(default: 60000, minimum: 1000), not a token limit. A single highlight plus its
+context can exceed that target; it stays intact and is flagged in `context.json`
+rather than silently truncated. Reduce context or use an AI with more capacity
+if needed. All `--context-*` options require `--prepare-only`; `--epub-output`
+and `--import-xml` cannot be combined with it.
+
+Packets remain local until you manually share them. They contain book excerpts
+and personal notes, so generated packets are excluded from Git by the supplied
+ignore patterns. No AI service or SDK dependency is added.
+
+Run all offline tests with:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
 ## Embed annotations in a separate EPUB
 
 Provide the original EPUB and an `annotations.json` export. This mode works offline and does not use ADB.

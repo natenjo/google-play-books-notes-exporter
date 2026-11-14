@@ -130,10 +130,31 @@ def main():
     parser.add_argument('--max-screens', type=int, default=500)
     parser.add_argument('--delay', type=float, default=2.5, help='Seconds to settle after each swipe')
     parser.add_argument('--stable', type=int, default=3, help='Unchanged captures before stopping')
-    parser.add_argument('--epub', type=Path, help='Create an annotated copy of this EPUB (offline mode)')
-    parser.add_argument('--annotations', type=Path, help='Extractor JSON array to embed; requires --epub')
+    parser.add_argument('--epub', type=Path, help='EPUB for offline annotation embedding or context preparation')
+    parser.add_argument('--annotations', type=Path, help='Extractor JSON array; requires --epub')
     parser.add_argument('--epub-output', type=Path, help='New EPUB path; default: INPUT-annotated.epub')
+    parser.add_argument('--prepare-only', action='store_true', help='Prepare local Markdown/JSON context for any AI; no API or EPUB changes')
+    parser.add_argument('--context-output', type=Path, help='New context packet directory; requires --prepare-only')
+    parser.add_argument('--context-neighbors', type=int, help='Adjacent text blocks on each side (default: 1); requires --prepare-only')
+    parser.add_argument('--context-part-chars', type=int, help='Markdown part size target in characters (default: 60000); requires --prepare-only')
     args = parser.parse_args()
+    # Context preparation is independent of both ADB capture and EPUB writing.
+    # Keep the dispatch before those modes so no API key, device or output EPUB
+    # is needed. The resulting files can be used manually with any AI service.
+    if args.prepare_only:
+        if not args.epub or not args.annotations or args.import_xml or args.epub_output:
+            parser.error('--prepare-only requires --epub and --annotations, without --import-xml or --epub-output')
+        from prepare_context import prepare_context
+        from zipfile import BadZipFile
+        try:
+            prepare_context(args.epub, args.annotations, args.context_output,
+                            neighbors=args.context_neighbors if args.context_neighbors is not None else 1,
+                            part_chars=args.context_part_chars if args.context_part_chars is not None else 60000)
+        except (ValueError, OSError, ET.ParseError, BadZipFile, KeyError) as exc:
+            parser.exit(1, f'Context preparation failed: {exc}\n')
+        return
+    if args.context_output is not None or args.context_neighbors is not None or args.context_part_chars is not None:
+        parser.error('--context-* options require --prepare-only')
     # EPUB conversion is a separate offline mode. Return before creating a
     # capture folder or making any ADB connection; the live loop stays unchanged.
     if args.epub or args.annotations or args.epub_output:
