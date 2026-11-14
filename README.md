@@ -56,7 +56,8 @@ No automatic wake, settings changes, scrolling to the top, or navigation into in
 ## Prepare a context packet for an AI based summany of your annotations
 
 Use `--prepare-only` with the EPUB and your extracted annotation JSON. This
-creates local files for manual use with any AI. It does not call an AI Model itsself, in this way you can pass it on to any AI you have access to.  
+creates one local `context.md` file for manual use with any AI. It does not call
+an AI model itself; you can pass the file to any AI you have access to.
 Keep `prepare_context.py` and `epub_annotations.py` beside `backup_playbooks.py`.
 
 ```powershell
@@ -67,28 +68,23 @@ python .\backup_playbooks.py --prepare-only --epub "C:\Books\My book.epub" --ann
 overwritten. If omitted, a timestamped context directory is created beside the
 EPUB.
 
-The packet includes:
-
-- `context.md`: the complete, ready-to-upload Markdown packet, with task instructions.
-- `context-part-001.md`, etc.: self-contained parts for smaller AI context windows.
-  Use these **instead of** the complete packet when it is too large. Read/process
-  all parts before asking for the final thematic summary.
-- `instructions.md`: the standalone task prompt, which you can edit before use.
-- `context.json`: the full structured archive, including all original input rows,
-  grouped selections, notes, candidate locations, settings and input hashes.
-- `README.md`: instructions for using the packet.
+The output directory contains only **`context.md`**: the complete, ready-to-upload
+Markdown packet, including task instructions, highlights, personal notes and
+referenced book passages. Upload this file to your chosen AI and ask it to follow
+the included instructions. No separate instructions, JSON archive, README or
+split Markdown files are generated.
 
 Each highlight has a stable `H-` source ID. Its original selection, personal
 notes, page/chapter labels and EPUB character range remain separate. The matched
 paragraph and, by default, one neighboring text block on each side provide
 context. Active EPUB section headings are included. Shared passages have `P-`
 IDs, so the complete packet does not repeat one paragraph for every highlight.
-Every split part includes all passages referenced by its own highlights.
 
 Exact range/comment repetitions are grouped without losing source rows or
 different comments. Ambiguous matches carry alternative locations and context;
 missing matches and note-only rows are explicitly labelled. Rows without text
-or notes stay in `context.json` but are omitted from the AI-facing Markdown.
+or notes are counted but omitted from the Markdown. The original input JSON is
+not modified.
 The extractor's normalization handles whitespace/invisible-character differences;
 it does not fuzzy-match altered words or silently invent an intended selection.
 Instead, the task prompt asks the AI to interpret imprecise selection boundaries
@@ -101,15 +97,13 @@ personal notes. It keeps the author's claims separate from personal notes.
 Optional settings:
 
 ```powershell
-python .\backup_playbooks.py --prepare-only --epub "C:\Books\My book.epub" --annotations "C:\Backups\final.json" --context-neighbors 0 --context-part-chars 40000
+python .\backup_playbooks.py --prepare-only --epub "C:\Books\My book.epub" --annotations "C:\Backups\final.json" --context-neighbors 0
 ```
 
 `--context-neighbors` is the number of adjacent nonempty text blocks on **each**
-side (default: 1). `--context-part-chars` sets a rendered **character** target
-(default: 60000, minimum: 1000), not a token limit. A single highlight plus its
-context can exceed that target; it stays intact and is flagged in `context.json`
-rather than silently truncated. Reduce context or use an AI with more capacity
-if needed. All `--context-*` options require `--prepare-only`; `--epub-output`
+side (default: 1). The full context is kept in one file, without splitting or
+size-based truncation. If it exceeds your AI's capacity, reduce the neighboring
+context or use an AI with more capacity. All `--context-*` options require `--prepare-only`; `--epub-output`
 and `--import-xml` cannot be combined with it.
 
 

@@ -96,21 +96,19 @@ class PrepareContextTests(unittest.TestCase):
         self.assertEqual(''.join(b['text'] for b in blocks), ''.join(body.itertext()))
         self.assertEqual([b['text'] for b in blocks], ['Intro', 'Start', 'Inner text.', 'Ende', 'Schluss'])
 
-    def test_split_parts_carry_all_references_and_cover_every_entry_once(self):
+    def test_single_markdown_carries_all_entries_context_and_instructions(self):
         _, packet = self.prepare([{'text': 'klarer Gedanke'}, {'text': 'Vorheriger Absatz'},
-                                  {'text': 'Nächster Absatz'}, {'text': 'Wiederholt'}], part_chars=3500)
-        self.assertGreater(len(packet['parts']), 1)
-        entry_ids = []
-        for part in packet['parts']:
-            markdown = (self.destination / part['file']).read_text(encoding='utf-8')
-            entry_ids.extend(re.findall(r'^### (H-[a-f0-9]+)$', markdown, re.M))
-            refs = set(re.findall(r'P-[a-f0-9]+', markdown))
-            definitions = set(re.findall(r'^### (P-[a-f0-9]+)$', markdown, re.M))
-            self.assertEqual(refs, definitions)
-            self.assertEqual(part['characters'], len(markdown))
-            if part['exceeds_target']:
-                self.assertEqual(len(re.findall(r'^### H-', markdown, re.M)), 1)
+                                  {'text': 'Nächster Absatz'}, {'text': 'Wiederholt'}])
+        self.assertEqual([p.name for p in self.destination.iterdir()], ['context.md'])
+        markdown = (self.destination / 'context.md').read_text(encoding='utf-8')
+        entry_ids = re.findall(r'^### (H-[a-f0-9]+)$', markdown, re.M)
+        refs = set(re.findall(r'P-[a-f0-9]+', markdown))
+        definitions = set(re.findall(r'^### (P-[a-f0-9]+)$', markdown, re.M))
+        self.assertEqual(refs, definitions)
         self.assertCountEqual(entry_ids, [e['id'] for e in packet['entries']])
+        self.assertIn(INSTRUCTIONS.strip(), markdown)
+        self.assertNotIn('context.json', markdown)
+        self.assertNotIn('split into parts', markdown)
 
     def test_refuses_existing_output_or_malformed_notes(self):
         self.destination.mkdir()
