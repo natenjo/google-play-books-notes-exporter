@@ -1,0 +1,16 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local annotation backups may contain private reading data.
+playbooks-backups/
+backups/
+sample-export/
+notes-*.xml
+playbooks-notes-*.xml
+annotations.json
+annotations.csv
+annotations.md
+observations.json
+run.json
